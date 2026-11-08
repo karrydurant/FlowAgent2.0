@@ -21,3 +21,5 @@
 互相委派：通过将一个 Agent 注册为工具的方式使得其它 Agent 能委派该 Agent
 
 ## [工作流执行引擎](docs/workflow-engine.md)
+
+## [多 Agent 协商引擎](docs/a2a-engine.md)
