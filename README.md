@@ -23,3 +23,7 @@
 ## [工作流执行引擎](docs/workflow-engine.md)
 
 ## [多 Agent 协商引擎](docs/a2a-engine.md)
+
+## [A2A 会话与消息传输](docs/a2a-conversation.md)
+
+# 多 Agent 协商引擎的熔断与舱壁隔离部分做得差不多了
