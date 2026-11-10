@@ -10,9 +10,9 @@
 public class PeerCircuitBreaker {
     // 放行失败的原因
     public enum Skip {
-        // 本地投递池满了：这次没投出去，但下一轮还有机会
+        // 本地投递池满了：这次没投出去，但下一轮协商还有机会
         SKIPPED_BULKHEAD,
-        // 这个 Agent 熔断了：本轮直接跳过，不再给它发消息
+        // 这个 Agent 熔断了：本轮协商直接跳过它，不再给它发消息
         SKIPPED_CIRCUIT_OPEN,
         // 一轮内重试次数用完
         SKIPPED_BULKHEAD_EXHAUSTED
