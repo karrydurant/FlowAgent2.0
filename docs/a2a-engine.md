@@ -25,7 +25,7 @@ public class PeerCircuitBreaker {
         TRANSIENT_FAILURE,    // 瞬时失败：Agent 跑炸了
         PERMANENT_FAILURE,    // 永久失败：对端明确拒绝/不可用
         SILENT,               // 沉默：本轮截止时间到了，但一条答复都没收到
-        LOCAL_ERROR           // 本地错误：Redis/执行器故障，不是对端 Agent 的问题
+        LOCAL_ERROR           // 本地错误：Redis/执行器(负责投递消息的线程池)故障，不是对端 Agent 的问题
     }
 
     // 一次放行的结果
@@ -215,6 +215,22 @@ public class PeerCircuitBreaker {
         }
     }
 
+    // 记一次结果：更新连续失败计数 + 往时间窗口加一条样本
+    private void record(Health h, Outcome outcome, long now) {
+        boolean failure = outcome != Outcome.SUCCESS;
+        h.window.addLast(new Sample(now, failure));
+        prune(h, now);   // 顺手清理过期样本
+
+        if (outcome == Outcome.SUCCESS) {
+            h.consecutiveFailures = 0;   // 成功了，连续失败清零
+            h.silentStreak = 0;
+        } else if (outcome == Outcome.SILENT) {
+            h.silentStreak++;            // 沉默次数 +1
+        } else {
+            h.consecutiveFailures++;      // 连续失败 +1
+            h.silentStreak = 0;
+        }
+    }
     // 判断是否触发熔断
     private String tripCause(Health h) {
         // 条件 1：连续失败次数够了
@@ -239,6 +255,19 @@ public class PeerCircuitBreaker {
         }
         double rate = (double) failures / samples;
         return rate >= properties.getCircuitFailureRateThreshold() ? "failure-rate" : null;
+    }
+
+    // 探针成功 → 关闭熔断，一切归零
+    private void close(String agentId, Health h, long now, String cause) {
+        transition(h, State.CLOSED, now, cause);
+        h.openUntil = 0L;
+        h.probeToken = null;
+        h.probeStartedAt = 0L;
+        h.attempts = 0;
+        h.consecutiveFailures = 0;
+        h.silentStreak = 0;
+        h.window.clear();
+        log.info("[PeerCircuit] HALF_OPEN -> CLOSED | agent={} | cause={}", agentId, cause);
     }
 
     // 打开熔断：指数退避
@@ -278,6 +307,10 @@ public class PeerCircuitBreaker {
     }
 }
 ```
+
+放行失败的原因：1.本地投递池满了，这次没有投递出去 2.目标 Agent 熔断了，本轮协商直接跳过该 Agent 3.重试次数用完了(舱壁限制)
+
+一次投递/答复的最终结论：成功、瞬时失败、永久失败、沉默(一轮协商截止时间到了，没有收到任何这个 Agent 的回复)、本地错误(Redis/执行器出问题了)
 
 ## 问题
 
